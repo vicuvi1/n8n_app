@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from config.constants import LLM_PROVIDERS
+from config.constants import DEFAULT_GEMINI_MODEL, GEMINI_MODEL_KEYS, LLM_PROVIDERS
 
 # Maps sidebar label -> session-state key for the provider API key.
 PROVIDER_KEY_FIELDS = {
@@ -39,6 +39,9 @@ def _load_secrets_into_session() -> None:
     if secrets.get("groq_api_key") and not st.session_state.get("groq_api_key"):
         st.session_state.groq_api_key = secrets["groq_api_key"]
 
+    if secrets.get("gemini_model") and st.session_state.get("gemini_model") == DEFAULT_GEMINI_MODEL:
+        st.session_state.gemini_model = secrets["gemini_model"]
+
     if secrets.get("llm_provider") and st.session_state.get("llm_provider") == LLM_PROVIDERS[0]:
         st.session_state.llm_provider = secrets["llm_provider"]
 
@@ -49,6 +52,12 @@ def _load_secrets_into_session() -> None:
 
 def get_credentials_meta() -> dict:
     return st.session_state.get("credentials_meta", {})
+
+
+def apply_saved_credentials_meta(meta: dict) -> None:
+    """Update session metadata after persisting secrets.toml."""
+    if meta:
+        st.session_state.credentials_meta = dict(meta)
 
 
 def get_n8n_key_expiry_info() -> tuple[str | None, int | None]:
@@ -71,6 +80,7 @@ def init_session_state() -> None:
     """Initialize all session state keys with safe defaults."""
     defaults = {
         "llm_provider": LLM_PROVIDERS[0],
+        "gemini_model": DEFAULT_GEMINI_MODEL,
         "gemini_api_key": "",
         "openai_api_key": "",
         "groq_api_key": "",
@@ -80,12 +90,19 @@ def init_session_state() -> None:
         "api_error": None,
         "delete_confirm_id": None,
         "credentials_meta": {},
+        "active_hub_page": "hub",
+        "docker_log": [],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
     _load_secrets_into_session()
+
+
+def get_gemini_model() -> str:
+    model = st.session_state.get("gemini_model", DEFAULT_GEMINI_MODEL)
+    return model if model in GEMINI_MODEL_KEYS else DEFAULT_GEMINI_MODEL
 
 
 def get_llm_provider() -> str:
@@ -116,10 +133,15 @@ def n8n_credentials_ready() -> bool:
 
 def get_n8n_base_url() -> str:
     """Normalize n8n instance URL to the /api/v1 base path."""
-    url = st.session_state.get("n8n_url", "").strip().rstrip("/")
+    url = get_n8n_instance_url()
     if url.endswith("/api/v1"):
         return url
     return f"{url}/api/v1"
+
+
+def get_n8n_instance_url() -> str:
+    """Return the n8n instance root URL (no /api/v1 suffix)."""
+    return st.session_state.get("n8n_url", "").strip().rstrip("/")
 
 
 def get_n8n_api_key() -> str:
