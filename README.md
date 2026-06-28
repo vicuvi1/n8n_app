@@ -52,6 +52,41 @@ streamlit run app.py
 
 The app opens in your browser at **http://localhost:8501**.
 
+## Windows desktop launcher (.exe)
+
+Build a one-click **`n8n Command Center.exe`** with a custom icon. Each time you run it, the launcher will:
+
+1. **Git pull** the latest code from [github.com/vicuvi1/n8n_app](https://github.com/vicuvi1/n8n_app)
+2. **Install/update** all Python dependencies in a local venv
+3. **Start Streamlit** and open `http://localhost:8501` in your browser
+
+App files are stored at: `%LOCALAPPDATA%\n8n_command_center\`
+
+### Prerequisites to build & run the .exe
+
+- **Python 3.10+** ([python.org](https://www.python.org/downloads/)) — check "Add Python to PATH"
+- **Git** ([git-scm.com](https://git-scm.com/download/win))
+
+### Build the executable
+
+```powershell
+cd c:\Users\victo\Desktop\n8n_app\launcher
+.\build.ps1
+```
+
+Output: `launcher\dist\n8n Command Center.exe`
+
+Copy that file to your Desktop or pin it to the taskbar. Double-click to launch.
+
+**First-run tip:** To persist your API keys, copy your secrets file after the first launch:
+
+```powershell
+mkdir "$env:LOCALAPPDATA\n8n_command_center\.streamlit" -Force
+copy ".streamlit\secrets.toml" "$env:LOCALAPPDATA\n8n_command_center\.streamlit\secrets.toml"
+```
+
+> **Note:** Keep the launcher window open while using the app. Press `Ctrl+C` in that window to stop the server.
+
 ### macOS / Linux
 
 ```bash
@@ -105,10 +140,20 @@ n8n_app/
 ├── services/
 │   ├── gemini_client.py            # Gemini workflow generation
 │   └── n8n_client.py               # n8n REST API wrapper
-└── utils/
-    ├── session.py                  # Session state helpers
-    ├── json_utils.py               # JSON parse + workflow validation
-    └── ui.py                       # Custom CSS + UI components
+├── utils/
+│   ├── session.py                  # Session state helpers
+│   ├── json_utils.py               # JSON parse + workflow validation
+│   ├── workflow_viz.py             # Mermaid flow diagrams
+│   └── ui.py                       # Custom CSS + UI components
+├── views/
+│   └── generator_tab.py            # AI Generator tab UI
+├── assets/
+│   └── icon.ico                    # App icon for Windows .exe
+└── launcher/
+    ├── launcher.py                 # Auto-update + start script
+    ├── build.ps1                   # Builds the .exe
+    ├── generate_icon.py            # Creates assets/icon.ico
+    └── n8n_command_center.spec     # PyInstaller config
 ```
 
 ## How it works

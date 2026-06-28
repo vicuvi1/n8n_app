@@ -20,3 +20,6 @@ Thumbs.db
 *.log
 node_modules/
 dist/
+launcher/build/
+launcher/dist/
+*.spec.bak

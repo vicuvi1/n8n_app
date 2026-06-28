@@ -310,6 +310,47 @@ CUSTOM_CSS = """
     border-top: 1px solid #1F2937;
     margin: 1.5rem 0;
   }
+  .flow-map-card {
+    background: #111827;
+    border: 1px solid #1F2937;
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    margin: 1rem 0;
+  }
+  .flow-map-card h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #E8EAEF;
+  }
+  .flow-text-path {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: #FF6D5A;
+    background: #0B0F19;
+    border: 1px solid #2A3144;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .node-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .node-chip {
+    background: #151C2F;
+    border: 1px solid #2A3144;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    color: #C5CAD6;
+  }
+  .node-chip strong { color: #FFFFFF; }
+  .node-chip span { color: #8B93A7; margin-left: 6px; }
 </style>
 """
 
@@ -397,4 +438,101 @@ def kpi_cards(total: int, success: int, failed: int) -> None:
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def render_flow_map(mermaid_diagram: str, text_flow: str, node_summaries: list) -> None:
+    """Render text path, node chips, and Mermaid flowchart for a generated workflow."""
+    import html
+
+    import streamlit as st
+    import streamlit.components.v1 as components
+
+    st.markdown('<div class="flow-map-card"><h4>📊 Pipeline Preview</h4>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="flow-text-path">{html.escape(text_flow)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    if node_summaries:
+        chips = "".join(
+            f'<div class="node-chip"><strong>{html.escape(n["name"])}</strong>'
+            f'<span>{html.escape(n["type"])}</span></div>'
+            for n in node_summaries
+        )
+        st.markdown(f'<div class="node-chip-row">{chips}</div>', unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    safe_diagram = mermaid_diagram.replace("`", "'")
+
+    # Native Streamlit Mermaid (v1.49+)
+    st.markdown(f"```mermaid\n{safe_diagram}\n```")
+
+    # Fallback iframe for older Streamlit builds
+    components.html(
+        f"""
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+        <div class="mermaid">{safe_diagram}</div>
+        <script>
+          mermaid.initialize({{
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {{
+              primaryColor: '#151C2F',
+              primaryTextColor: '#E8EAEF',
+              primaryBorderColor: '#FF6D5A',
+              lineColor: '#6B7280',
+              secondaryColor: '#111827',
+              tertiaryColor: '#0B0F19'
+            }}
+          }});
+        </script>
+        """,
+        height=260,
+        scrolling=True,
+    )
+
+
+def render_copy_json_button(json_str: str, button_key: str = "copy_json") -> None:
+    """One-click clipboard copy for workflow JSON."""
+    import json
+
+    import streamlit.components.v1 as components
+
+    escaped = json.dumps(json_str)
+    components.html(
+        f"""
+        <button id="btn_{button_key}" style="
+          background: linear-gradient(135deg, #151C2F 0%, #1A2236 100%);
+          border: 1px solid #2A3144;
+          border-radius: 10px;
+          color: #E8EAEF;
+          font-family: Inter, system-ui, sans-serif;
+          font-size: 0.875rem;
+          font-weight: 600;
+          padding: 10px 20px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          width: 100%;
+        "
+        onmouseover="this.style.borderColor='#FF6D5A'; this.style.color='#FFFFFF';"
+        onmouseout="this.style.borderColor='#2A3144'; this.style.color='#E8EAEF';"
+        onclick="
+          navigator.clipboard.writeText({escaped}).then(() => {{
+            const b = document.getElementById('btn_{button_key}');
+            b.innerText = '✓ Copied to clipboard';
+            b.style.borderColor = '#10B981';
+            b.style.color = '#34D399';
+            setTimeout(() => {{
+              b.innerText = '📋 Copy JSON to Clipboard';
+              b.style.borderColor = '#2A3144';
+              b.style.color = '#E8EAEF';
+            }}, 2000);
+          }});
+        ">
+          📋 Copy JSON to Clipboard
+        </button>
+        """,
+        height=52,
     )

@@ -18,53 +18,29 @@ Tabs:
 
 import time
 
-
-
 import pandas as pd
-
 import streamlit as st
 
-
-
 from config.constants import AUTO_REFRESH_INTERVAL, DEBUG
-
-from services.gemini_client import GeminiAPIError, generate_workflow
-
 from services.n8n_client import N8nAPIError, N8nClient
-
 from utils.session import (
-
     credentials_ready,
-
-    get_gemini_api_key,
-
     get_n8n_api_key,
-
     get_n8n_base_url,
-
+    get_n8n_key_expiry_info,
     init_session_state,
-
     n8n_credentials_ready,
-
 )
-
 from utils.ui import (
-
     empty_state,
-
     inject_styles,
-
     kpi_cards,
-
     render_header,
-
     render_sidebar_brand,
-
     section_header,
-
     status_pill,
-
 )
+from views.generator_tab import render_generator_tab
 
 
 
@@ -106,9 +82,7 @@ def render_sidebar() -> None:
 
     st.sidebar.markdown("##### API Configuration")
 
-    st.sidebar.caption("Stored in session memory only — not persisted to disk.")
-
-
+    st.sidebar.caption("n8n key loaded from `.streamlit/secrets.toml` when present (gitignored).")
 
     st.session_state.gemini_api_key = st.sidebar.text_input(
 
@@ -151,10 +125,16 @@ def render_sidebar() -> None:
 
 
     st.sidebar.markdown("---")
-
     st.sidebar.markdown("##### Connection Status")
 
-
+    expires_at, days_left = get_n8n_key_expiry_info()
+    if expires_at and days_left is not None:
+        if days_left < 0:
+            st.sidebar.error(f"n8n API key **expired** on {expires_at[:10]}. Generate a new one in n8n → Settings → API.")
+        elif days_left <= 7:
+            st.sidebar.warning(f"n8n API key expires **{expires_at[:10]}** ({days_left} day(s) left).")
+        else:
+            st.sidebar.info(f"n8n API key valid until **{expires_at[:10]}** ({days_left} days left).")
 
     if credentials_ready():
 
@@ -192,136 +172,7 @@ def show_api_error(exc: Exception) -> None:
 
 
 
-# ─── Tab 1: AI Workflow Generator ────────────────────────────────────────────
-
-
-
-def tab_generator() -> None:
-
-    section_header(
-
-        "AI Workflow Generator",
-
-        "Describe your automation in plain English — Gemini builds production-ready n8n JSON.",
-
-    )
-
-
-
-    if not credentials_ready():
-
-        empty_state(
-
-            "🔑",
-
-            "API keys required",
-
-            "Enter your Gemini and n8n credentials in the sidebar to start generating workflows.",
-
-        )
-
-        return
-
-
-
-    prompt = st.text_area(
-
-        "Workflow prompt",
-
-        height=160,
-
-        label_visibility="collapsed",
-
-        placeholder=(
-
-            'Example: "Build a workflow that catches a webhook, parses an IP address, '
-
-            'checks it on AbuseIPDB, and sends a Discord alert if the score is above 80."'
-
-        ),
-
-    )
-
-
-
-    col_gen, col_push, col_spacer = st.columns([1, 1, 2])
-
-
-
-    with col_gen:
-
-        generate_clicked = st.button("✨ Generate Workflow", type="primary", use_container_width=True)
-
-
-
-    with col_push:
-
-        push_clicked = st.button(
-
-            "🚀 Push to n8n",
-
-            use_container_width=True,
-
-            disabled=st.session_state.generated_workflow is None,
-
-        )
-
-
-
-    if generate_clicked:
-
-        with st.spinner("Gemini is designing your workflow…"):
-
-            try:
-
-                workflow = generate_workflow(get_gemini_api_key(), prompt)
-
-                st.session_state.generated_workflow = workflow
-
-                st.session_state.api_error = None
-
-                st.success(f'Workflow **"{workflow.get("name", "Untitled")}"** generated successfully.')
-
-            except (GeminiAPIError, ValueError) as exc:
-
-                st.session_state.generated_workflow = None
-
-                show_api_error(exc)
-
-
-
-    if st.session_state.generated_workflow:
-
-        st.markdown("---")
-
-        st.markdown("##### Generated Workflow Preview")
-
-        with st.container(border=True):
-
-            st.json(st.session_state.generated_workflow)
-
-
-
-    if push_clicked and st.session_state.generated_workflow:
-
-        with st.spinner("Installing workflow on your n8n instance…"):
-
-            try:
-
-                client = get_n8n_client()
-
-                result = client.create_workflow(st.session_state.generated_workflow)
-
-                workflow_id = result.get("id", "unknown")
-
-                st.success(f"Workflow installed successfully — ID: `{workflow_id}`")
-
-            except N8nAPIError as exc:
-
-                show_api_error(exc)
-
-
-
+# ─── Tab 1: AI Workflow Generator (see views/generator_tab.py) ───────────────
 
 
 # ─── Tab 2: Workflow Control Center ──────────────────────────────────────────
@@ -692,7 +543,7 @@ def main() -> None:
 
     with tab1:
 
-        tab_generator()
+        render_generator_tab(show_api_error)
 
     with tab2:
 
