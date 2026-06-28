@@ -1,8 +1,22 @@
-node_modules/
-dist/
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Environment
+.env
+.env.*
+
+# OS / IDE
 .DS_Store
 Thumbs.db
 *.log
-.env
-.env.*
-!.env.example
+node_modules/
+dist/
