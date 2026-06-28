@@ -21,7 +21,7 @@ import time
 import pandas as pd
 import streamlit as st
 
-from config.constants import AUTO_REFRESH_INTERVAL, DEBUG
+from config.constants import AUTO_REFRESH_INTERVAL, DEBUG, LLM_PROVIDERS
 from services.n8n_client import N8nAPIError, N8nClient
 from utils.session import (
     credentials_ready,
@@ -81,22 +81,42 @@ def render_sidebar() -> None:
 
 
     st.sidebar.markdown("##### API Configuration")
+    st.sidebar.caption("Keys load from `.streamlit/secrets.toml` when present (gitignored).")
 
-    st.sidebar.caption("n8n key loaded from `.streamlit/secrets.toml` when present (gitignored).")
-
-    st.session_state.gemini_api_key = st.sidebar.text_input(
-
-        "Google Gemini API Key",
-
-        value=st.session_state.gemini_api_key,
-
-        type="password",
-
-        placeholder="AIza…",
-
-        help="Free key at aistudio.google.com/apikey",
-
+    st.session_state.llm_provider = st.sidebar.selectbox(
+        "Select LLM Provider",
+        options=LLM_PROVIDERS,
+        index=LLM_PROVIDERS.index(st.session_state.get("llm_provider", LLM_PROVIDERS[0]))
+        if st.session_state.get("llm_provider") in LLM_PROVIDERS
+        else 0,
     )
+
+    provider = st.session_state.llm_provider
+
+    if provider == "Google Gemini":
+        st.session_state.gemini_api_key = st.sidebar.text_input(
+            "Google Gemini API Key",
+            value=st.session_state.gemini_api_key,
+            type="password",
+            placeholder="AIza…",
+            help="Free key at aistudio.google.com/apikey",
+        )
+    elif provider == "OpenAI":
+        st.session_state.openai_api_key = st.sidebar.text_input(
+            "OpenAI API Key",
+            value=st.session_state.openai_api_key,
+            type="password",
+            placeholder="sk-…",
+            help="platform.openai.com/api-keys",
+        )
+    elif provider == "Groq":
+        st.session_state.groq_api_key = st.sidebar.text_input(
+            "Groq API Key",
+            value=st.session_state.groq_api_key,
+            type="password",
+            placeholder="gsk_…",
+            help="console.groq.com/keys",
+        )
 
     st.session_state.n8n_url = st.sidebar.text_input(
 
@@ -141,8 +161,7 @@ def render_sidebar() -> None:
         status_pill("All systems ready", "ok")
 
     elif n8n_credentials_ready():
-
-        status_pill("Gemini key required", "warn")
+        status_pill(f"{provider} API key required", "warn")
 
     else:
 

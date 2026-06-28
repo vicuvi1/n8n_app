@@ -3,8 +3,13 @@
 APP_TITLE = "n8n AI Management Dashboard"
 APP_ICON = "⚡"
 
-# Gemini model for workflow generation (free tier compatible).
-GEMINI_MODEL = "gemini-2.5-flash"
+# LLM providers (sidebar dropdown labels).
+LLM_PROVIDERS = ["Google Gemini", "OpenAI", "Groq"]
+
+# Models per provider.
+GEMINI_MODEL = "gemini-1.5-flash"
+OPENAI_MODEL = "gpt-4o-mini"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # HTTP timeout for n8n API calls (seconds).
 N8N_REQUEST_TIMEOUT = 15

@@ -4,6 +4,15 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
+from config.constants import LLM_PROVIDERS
+
+# Maps sidebar label -> session-state key for the provider API key.
+PROVIDER_KEY_FIELDS = {
+    "Google Gemini": "gemini_api_key",
+    "OpenAI": "openai_api_key",
+    "Groq": "groq_api_key",
+}
+
 
 def _load_secrets_into_session() -> None:
     """Pre-fill session state from .streamlit/secrets.toml when available."""
@@ -15,7 +24,6 @@ def _load_secrets_into_session() -> None:
     if secrets.get("n8n_url") and not st.session_state.get("n8n_url"):
         st.session_state.n8n_url = secrets["n8n_url"]
     elif secrets.get("n8n_url"):
-        # Always sync URL from secrets if user hasn't typed in sidebar this session
         if st.session_state.n8n_url == "http://localhost:5678":
             st.session_state.n8n_url = secrets["n8n_url"]
 
@@ -24,6 +32,15 @@ def _load_secrets_into_session() -> None:
 
     if secrets.get("gemini_api_key") and not st.session_state.get("gemini_api_key"):
         st.session_state.gemini_api_key = secrets["gemini_api_key"]
+
+    if secrets.get("openai_api_key") and not st.session_state.get("openai_api_key"):
+        st.session_state.openai_api_key = secrets["openai_api_key"]
+
+    if secrets.get("groq_api_key") and not st.session_state.get("groq_api_key"):
+        st.session_state.groq_api_key = secrets["groq_api_key"]
+
+    if secrets.get("llm_provider") and st.session_state.get("llm_provider") == LLM_PROVIDERS[0]:
+        st.session_state.llm_provider = secrets["llm_provider"]
 
     meta = secrets.get("credentials_meta", {})
     if meta:
@@ -35,10 +52,7 @@ def get_credentials_meta() -> dict:
 
 
 def get_n8n_key_expiry_info() -> tuple[str | None, int | None]:
-    """
-    Return (expiry_iso, days_remaining) for the saved n8n API key.
-    days_remaining is negative if already expired.
-    """
+    """Return (expiry_iso, days_remaining) for the saved n8n API key."""
     meta = get_credentials_meta()
     expires_raw = meta.get("n8n_api_key_expires")
     if not expires_raw:
@@ -56,7 +70,10 @@ def get_n8n_key_expiry_info() -> tuple[str | None, int | None]:
 def init_session_state() -> None:
     """Initialize all session state keys with safe defaults."""
     defaults = {
+        "llm_provider": LLM_PROVIDERS[0],
         "gemini_api_key": "",
+        "openai_api_key": "",
+        "groq_api_key": "",
         "n8n_url": "http://localhost:5678",
         "n8n_api_key": "",
         "generated_workflow": None,
@@ -71,13 +88,25 @@ def init_session_state() -> None:
     _load_secrets_into_session()
 
 
+def get_llm_provider() -> str:
+    return st.session_state.get("llm_provider", LLM_PROVIDERS[0])
+
+
+def get_llm_api_key(provider: str | None = None) -> str:
+    """Return the API key for the active (or specified) LLM provider."""
+    provider = provider or get_llm_provider()
+    field = PROVIDER_KEY_FIELDS.get(provider, "gemini_api_key")
+    return st.session_state.get(field, "")
+
+
+def llm_credentials_ready() -> bool:
+    """Return True when the selected LLM provider has an API key."""
+    return bool(get_llm_api_key())
+
+
 def credentials_ready() -> bool:
-    """Return True when all three API credentials are provided."""
-    return bool(
-        st.session_state.get("gemini_api_key")
-        and st.session_state.get("n8n_url")
-        and st.session_state.get("n8n_api_key")
-    )
+    """Return True when n8n + active LLM provider credentials are set."""
+    return n8n_credentials_ready() and llm_credentials_ready()
 
 
 def n8n_credentials_ready() -> bool:

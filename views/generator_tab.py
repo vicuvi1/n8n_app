@@ -7,9 +7,15 @@ import json
 import streamlit as st
 
 from config.workflow_templates import TEMPLATE_KEYS, WORKFLOW_TEMPLATES
-from services.gemini_client import GeminiAPIError, generate_workflow
+from services.llm_client import LLMError, MissingDependencyError, generate_workflow
 from services.n8n_client import N8nAPIError, N8nClient
-from utils.session import credentials_ready, get_gemini_api_key, get_n8n_api_key, get_n8n_base_url
+from utils.session import (
+    credentials_ready,
+    get_llm_api_key,
+    get_llm_provider,
+    get_n8n_api_key,
+    get_n8n_base_url,
+)
 from utils.ui import empty_state, render_copy_json_button, render_flow_map, section_header
 from utils.workflow_viz import build_linear_flow_text, build_mermaid_diagram, get_node_summary
 
@@ -64,15 +70,22 @@ def _render_input_panel() -> tuple[str, bool, bool]:
 
 
 def _run_generation(prompt: str, show_api_error) -> None:
-    with st.spinner("Gemini is designing your workflow…"):
+    provider = get_llm_provider()
+    api_key = get_llm_api_key(provider)
+
+    with st.spinner(f"{provider} is designing your workflow…"):
         try:
-            workflow = generate_workflow(get_gemini_api_key(), prompt)
+            workflow = generate_workflow(provider, api_key, prompt)
             st.session_state.generated_workflow = workflow
             st.session_state.api_error = None
             st.success(
-                f'✅ Workflow **"{workflow.get("name", "Untitled")}"** generated successfully.'
+                f'✅ Workflow **"{workflow.get("name", "Untitled")}"** generated via **{provider}**.'
             )
-        except (GeminiAPIError, ValueError) as exc:
+        except MissingDependencyError as exc:
+            st.session_state.generated_workflow = None
+            st.error(str(exc))
+            st.info("Then restart the app: `pip install -r requirements.txt`")
+        except (LLMError, ValueError) as exc:
             st.session_state.generated_workflow = None
             show_api_error(exc)
 
@@ -116,16 +129,17 @@ def _push_to_n8n(show_api_error) -> None:
 
 def render_generator_tab(show_api_error) -> None:
     """Main entry for the AI Generator tab."""
+    provider = get_llm_provider()
     section_header(
         "AI Workflow Generator",
-        "Choose a blueprint or write a custom prompt — Gemini produces deployable n8n JSON.",
+        f"Choose a blueprint or write a custom prompt — **{provider}** produces deployable n8n JSON.",
     )
 
     if not credentials_ready():
         empty_state(
             "🔑",
             "API keys required",
-            "Enter your Gemini and n8n credentials in the sidebar to start generating workflows.",
+            f"Enter your **{provider}** and n8n credentials in the sidebar to start generating workflows.",
         )
         return
 
@@ -141,7 +155,7 @@ def render_generator_tab(show_api_error) -> None:
     with right:
         st.markdown(
             '<div class="section-card"><h3>② Generate & Deploy</h3>'
-            "<p>Preview the pipeline visually, copy JSON, then push to n8n.</p></div>",
+            f"<p>Preview the pipeline, copy JSON, then push to n8n via {provider}.</p></div>",
             unsafe_allow_html=True,
         )
 
