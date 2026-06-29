@@ -1,5 +1,7 @@
 """Automation Hub overview — landing page."""
 
+import time
+
 import streamlit as st
 
 from config.navigation import HUB_PAGES, HUB_PAGE_ORDER
@@ -13,6 +15,11 @@ from services.docker_service import get_n8n_status
 
 
 def _fetch_hub_stats() -> tuple[dict, object | None]:
+    cache = st.session_state.get("hub_stats_cache")
+    now = time.time()
+    if isinstance(cache, dict) and now - cache.get("ts", 0) < 45:
+        return cache["stats"], cache.get("warning")
+
     stats = {
         "workflows": 0,
         "active": 0,
@@ -39,6 +46,7 @@ def _fetch_hub_stats() -> tuple[dict, object | None]:
         warning = explain_n8n_api_error(exc, "loading hub statistics")
         warning.level = "warning"
 
+    st.session_state.hub_stats_cache = {"ts": time.time(), "stats": stats, "warning": warning}
     return stats, warning
 
 
@@ -53,7 +61,12 @@ def render_hub_home(set_active_page) -> None:
     n8n_status = get_n8n_status()
     render_docker_status_banner(n8n_status)
     render_n8n_quick_actions(n8n_status, set_active_page=set_active_page)
-    if st.button("Open Docker Control Panel", key="hub_go_docker", use_container_width=False, type="secondary"):
+    if st.button(
+        "Open Docker Control Panel",
+        key="hub_runtime_go_docker",
+        use_container_width=False,
+        type="secondary",
+    ):
         set_active_page("docker")
         st.rerun()
 
@@ -91,8 +104,14 @@ def render_hub_home(set_active_page) -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button(f"Open {page['label']}", key=f"hub_go_{page_id}", use_container_width=True, type="secondary"):
+            if st.button(
+                f"Open {page['label']}",
+                key=f"hub_card_go_{page_id}",
+                use_container_width=True,
+                type="secondary",
+            ):
                 set_active_page(page_id)
+                st.rerun()
 
     render_section_label("System snapshot")
     provider = get_llm_provider()

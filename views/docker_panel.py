@@ -14,6 +14,7 @@ from services.docker_service import (
     DockerCommandResult,
     DockerError,
     get_n8n_status,
+    invalidate_n8n_status_cache,
     restart_n8n,
     start_n8n,
     stop_n8n,
@@ -53,6 +54,7 @@ def _append_docker_log(
 def _run_docker_action(command_label: str, action: Callable[[], DockerCommandResult]) -> None:
     try:
         result = action()
+        invalidate_n8n_status_cache()
         _append_docker_log("success", result.command, result.message, result.output)
     except DockerError as exc:
         fb = explain_docker_error(exc)
@@ -155,19 +157,16 @@ def render_docker_panel() -> None:
     with col_start:
         if st.button("▶️ Start n8n (Docker)", use_container_width=True, type="primary"):
             _run_docker_action("docker start n8n", start_n8n)
-            time.sleep(0.5)
             st.rerun()
 
     with col_stop:
         if st.button("⏹️ Stop n8n", use_container_width=True, type="secondary"):
             _run_docker_action("docker stop n8n", stop_n8n)
-            time.sleep(0.5)
             st.rerun()
 
     with col_restart:
         if st.button("🔄 Restart n8n", use_container_width=True, type="secondary"):
             _run_docker_action("docker restart n8n", restart_n8n)
-            time.sleep(0.5)
             st.rerun()
 
     _render_docker_log()
@@ -176,12 +175,14 @@ def render_docker_panel() -> None:
     refresh_col, auto_col = st.columns([1, 2])
     with refresh_col:
         if st.button("↻ Refresh status", use_container_width=True):
+            invalidate_n8n_status_cache()
+            status = get_n8n_status(force_refresh=True)
             _append_docker_log("info", "status check", status.message)
             st.rerun()
     with auto_col:
         auto_refresh = st.checkbox(
-            "Live status (auto-refresh every 3s)",
-            value=True,
+            "Live status (auto-refresh every 10s)",
+            value=False,
             key="docker_auto_refresh",
         )
 

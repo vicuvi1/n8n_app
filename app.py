@@ -24,6 +24,7 @@ from utils.session import (
     init_session_state,
     n8n_credentials_ready,
 )
+from utils.sidebar import render_sidebar
 from utils.user_feedback import show_user_error
 from utils.ui import (
     empty_state,

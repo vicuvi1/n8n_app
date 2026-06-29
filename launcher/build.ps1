@@ -1,13 +1,15 @@
-# Build "n8n Command Center.exe" — run from project root or launcher folder
+# Build "n8n Command Center.exe" and copy to Desktop
 $ErrorActionPreference = "Stop"
 $LauncherDir = $PSScriptRoot
 $Root = Split-Path $LauncherDir -Parent
+$Desktop = [Environment]::GetFolderPath("Desktop")
 
-Write-Host "=== Building n8n Command Center.exe ===" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "=== n8n Command Center - Build EXE ===" -ForegroundColor Cyan
+Write-Host ""
 
 Set-Location $LauncherDir
 
-# Use project venv or system Python
 $Python = @(
     "$Root\.venv\Scripts\python.exe",
     (Get-Command py -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
@@ -15,30 +17,39 @@ $Python = @(
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 
 if (-not $Python) {
-    Write-Host "ERROR: Python not found. Install Python 3.10+ first." -ForegroundColor Red
+    Write-Host "ERROR: Python 3.10+ not found. Install from https://www.python.org/downloads/" -ForegroundColor Red
     exit 1
 }
 
 Write-Host "Using Python: $Python"
 & $Python -m pip install -q -r requirements-build.txt
 
-Write-Host "Generating icon..."
-& $Python generate_icon.py
+if (-not (Test-Path "$Root\assets\icon.ico")) {
+    Write-Host "Generating icon..."
+    & $Python generate_icon.py
+}
 
-Write-Host "Running PyInstaller..."
+Write-Host "Building executable (PyInstaller)..."
 & $Python -m PyInstaller --noconfirm --clean n8n_command_center.spec
 
 $ExePath = Join-Path $LauncherDir "dist\n8n Command Center.exe"
-if (Test-Path $ExePath) {
-    Write-Host ""
-    Write-Host "SUCCESS! Executable created:" -ForegroundColor Green
-    Write-Host "  $ExePath"
-    Write-Host ""
-    Write-Host "Copy this .exe to your Desktop. On first run it will:"
-    Write-Host "  - Clone/update from GitHub"
-    Write-Host "  - Install Python dependencies"
-    Write-Host "  - Open the dashboard in your browser"
-} else {
+if (-not (Test-Path $ExePath)) {
     Write-Host "ERROR: Build failed - exe not found." -ForegroundColor Red
     exit 1
 }
+
+$DesktopExe = Join-Path $Desktop "n8n Command Center.exe"
+Copy-Item -Path $ExePath -Destination $DesktopExe -Force
+
+Write-Host ""
+Write-Host "SUCCESS!" -ForegroundColor Green
+Write-Host "  Built:  $ExePath"
+Write-Host "  Copied: $DesktopExe"
+Write-Host ""
+Write-Host "Double-click the Desktop icon to:"
+Write-Host "  1. Pull latest code from GitHub"
+Write-Host "  2. Install/update Python packages"
+Write-Host "  3. Open http://localhost:8501 in your browser"
+Write-Host ""
+Write-Host "Requires: Python 3.10+ and Git (installed once on your PC)."
+Write-Host ""

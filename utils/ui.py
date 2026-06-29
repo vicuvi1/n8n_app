@@ -1410,7 +1410,6 @@ def render_flow_map(mermaid_diagram: str, text_flow: str, node_summaries: list) 
     import html
 
     import streamlit as st
-    import streamlit.components.v1 as components
 
     st.markdown('<div class="flow-map-card"><h4>📊 Pipeline Preview</h4>', unsafe_allow_html=True)
     st.markdown(
@@ -1430,32 +1429,8 @@ def render_flow_map(mermaid_diagram: str, text_flow: str, node_summaries: list) 
 
     safe_diagram = mermaid_diagram.replace("`", "'")
 
-    # Native Streamlit Mermaid (v1.49+)
+    # Native Streamlit Mermaid (single render — duplicate iframe removed for performance)
     st.markdown(f"```mermaid\n{safe_diagram}\n```")
-
-    # Fallback iframe for older Streamlit builds
-    components.html(
-        f"""
-        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-        <div class="mermaid">{safe_diagram}</div>
-        <script>
-          mermaid.initialize({{
-            startOnLoad: true,
-            theme: 'dark',
-            themeVariables: {{
-              primaryColor: '#151C2F',
-              primaryTextColor: '#E8EAEF',
-              primaryBorderColor: '#FF6D5A',
-              lineColor: '#6B7280',
-              secondaryColor: '#111827',
-              tertiaryColor: '#0B0F19'
-            }}
-          }});
-        </script>
-        """,
-        height=260,
-        scrolling=True,
-    )
 
 
 def render_copy_json_button(

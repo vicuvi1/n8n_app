@@ -5,9 +5,13 @@ from __future__ import annotations
 import shutil
 import socket
 import subprocess
+import time
 from dataclasses import dataclass
 
 from config.constants import DOCKER_CONTAINER_NAME, N8N_DEFAULT_PORT, N8N_DEFAULT_URL
+
+N8N_STATUS_CACHE_SEC = 8
+_status_cache: dict = {"ts": 0.0, "data": None}
 
 
 class DockerError(Exception):
@@ -82,11 +86,17 @@ def is_port_open(host: str = "127.0.0.1", port: int = N8N_DEFAULT_PORT) -> bool:
         return False
 
 
-def get_n8n_status(
+def invalidate_n8n_status_cache() -> None:
+    """Clear cached Docker/port status (call after start/stop/restart)."""
+    _status_cache["ts"] = 0.0
+    _status_cache["data"] = None
+
+
+def _build_n8n_status(
     container_name: str = DOCKER_CONTAINER_NAME,
     url: str = N8N_DEFAULT_URL,
 ) -> N8nRuntimeStatus:
-    """Return combined Docker + port status for n8n."""
+    """Compute n8n runtime status (uncached)."""
     if not shutil.which("docker"):
         return N8nRuntimeStatus(
             state="unknown",
@@ -138,6 +148,28 @@ def get_n8n_status(
         container_name=container_name,
         url=url,
     )
+
+
+def get_n8n_status(
+    container_name: str = DOCKER_CONTAINER_NAME,
+    url: str = N8N_DEFAULT_URL,
+    *,
+    force_refresh: bool = False,
+) -> N8nRuntimeStatus:
+    """Return combined Docker + port status for n8n (cached briefly)."""
+    now = time.time()
+    cached = _status_cache.get("data")
+    if (
+        not force_refresh
+        and cached is not None
+        and now - float(_status_cache.get("ts", 0)) < N8N_STATUS_CACHE_SEC
+    ):
+        return cached
+
+    status = _build_n8n_status(container_name, url)
+    _status_cache["ts"] = now
+    _status_cache["data"] = status
+    return status
 
 
 def start_n8n(container_name: str = DOCKER_CONTAINER_NAME) -> DockerCommandResult:
