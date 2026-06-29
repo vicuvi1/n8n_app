@@ -1193,7 +1193,11 @@ CUSTOM_CSS = """
 
 
 def inject_styles() -> None:
+    """Inject global CSS once per browser session."""
+    if st.session_state.get("_styles_injected"):
+        return
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    st.session_state._styles_injected = True
 
 
 def _n8n_status_pill_html(status) -> str:
@@ -1226,9 +1230,9 @@ def _n8n_status_pill_html(status) -> str:
 def render_n8n_status_pill(status=None) -> None:
     """Render a compact n8n running / stopped pill."""
     if status is None:
-        from services.docker_service import get_n8n_status
+        from utils.runtime_cache import get_shared_runtime_status
 
-        status = get_n8n_status()
+        status = get_shared_runtime_status()
 
     st.markdown(
         f'<div class="dash-header-status">{_n8n_status_pill_html(status)}</div>',
@@ -1236,10 +1240,12 @@ def render_n8n_status_pill(status=None) -> None:
     )
 
 
-def render_header() -> None:
-    from services.docker_service import get_n8n_status
+def render_header(status=None) -> None:
+    if status is None:
+        from utils.runtime_cache import get_shared_runtime_status
 
-    status = get_n8n_status()
+        status = get_shared_runtime_status()
+
     pill_html = _n8n_status_pill_html(status)
 
     st.markdown(

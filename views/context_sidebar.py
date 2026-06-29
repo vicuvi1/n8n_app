@@ -7,6 +7,7 @@ import html
 import streamlit as st
 
 from services.automation_status import fetch_automation_status
+from utils.runtime_cache import invalidate_all_caches
 
 
 def _status_color(state: str) -> str:
@@ -54,6 +55,7 @@ def render_automation_status_card() -> None:
     )
 
     if st.button("↻ Refresh status", key="context_refresh_automation_status", use_container_width=True):
+        invalidate_all_caches()
         fetch_automation_status(force_refresh=True)
         st.rerun()
 

@@ -16,15 +16,18 @@ from config.constants import (
     WORKFLOW_OPTIMIZATION_OPTIONS,
 )
 from config.workflow_templates import READY_MADE_TEMPLATE_KEYS, READY_MADE_TEMPLATES
-from services.llm_client import LLMError, MissingDependencyError, generate_workflow_with_gemini
+from services.llm_client import LLMError, MissingDependencyError, generate_workflow, generate_workflow_with_gemini
 from services.n8n_client import N8nClient, WorkflowPushResult
 from utils.json_utils import normalize_workflow, parse_workflow_json
+from utils.runtime_cache import invalidate_data_caches
 from utils.session import (
-    get_gemini_api_key,
     get_gemini_model,
+    get_llm_api_key,
+    get_llm_provider,
     get_n8n_api_key,
     get_n8n_base_url,
     get_n8n_instance_url,
+    llm_credentials_ready,
     n8n_credentials_ready,
 )
 from utils.template_store import (
@@ -90,7 +93,10 @@ def _get_workflow_optimization() -> str:
 
 
 def _render_optimization_options() -> str:
-    """Speed vs reliability toggle for workflow generation."""
+    """Speed vs reliability toggle for workflow generation (Gemini only)."""
+    if get_llm_provider() != "Google Gemini":
+        return DEFAULT_WORKFLOW_OPTIMIZATION
+
     st.markdown('<div class="hub-panel">', unsafe_allow_html=True)
     st.markdown('<p class="hub-panel-title">Optimization</p>', unsafe_allow_html=True)
     mode = st.radio(
@@ -232,9 +238,10 @@ def _run_generation(
     *,
     template_label: str | None = None,
 ) -> None:
-    api_key = get_gemini_api_key()
+    provider = get_llm_provider()
+    api_key = get_llm_api_key()
     model = get_gemini_model()
-    model_label = GEMINI_MODELS.get(model, model)
+    model_label = GEMINI_MODELS.get(model, model) if provider == "Google Gemini" else provider
 
     optimization = _get_workflow_optimization()
     optimization_label = WORKFLOW_OPTIMIZATION_OPTIONS[optimization]
@@ -247,12 +254,20 @@ def _run_generation(
 
     with st.spinner(spinner_text):
         try:
-            workflow = generate_workflow_with_gemini(
-                api_key,
-                prompt,
-                model,
-                optimization_mode=optimization,
-            )
+            if provider == "Google Gemini":
+                workflow = generate_workflow_with_gemini(
+                    api_key,
+                    prompt,
+                    model,
+                    optimization_mode=optimization,
+                )
+            else:
+                workflow = generate_workflow(
+                    provider,
+                    api_key,
+                    prompt,
+                    gemini_model=model,
+                )
             st.session_state.generated_workflow = workflow
             st.session_state.api_error = None
             reset_workflow_json_editor(workflow)
@@ -303,6 +318,7 @@ def _push_to_n8n(workflow: dict) -> None:
 
         if result.success:
             st.session_state.generated_workflow = workflow
+            invalidate_data_caches()
             st.toast(f'Workflow "{result.workflow_name}" pushed to n8n', icon="✅")
 
 
@@ -399,12 +415,13 @@ def _render_workflow_output(show_api_error) -> None:
     _render_workflow_action_buttons(json_str, updated)
 
     render_section_label("Visual workflow map", "Node flow preview")
-    mermaid = build_mermaid_diagram(updated)
-    render_flow_map(
-        mermaid,
-        build_linear_flow_text(updated),
-        get_node_summary(updated),
-    )
+    with st.expander("Show pipeline diagram", expanded=False):
+        mermaid = build_mermaid_diagram(updated)
+        render_flow_map(
+            mermaid,
+            build_linear_flow_text(updated),
+            get_node_summary(updated),
+        )
 
 
 def _reuse_history_entry(entry: dict) -> None:
@@ -507,18 +524,19 @@ def _render_workflow_history() -> None:
 
 
 def _render_credentials_hint() -> None:
-    if get_gemini_api_key():
+    if llm_credentials_ready():
         return
 
+    provider = get_llm_provider()
     empty_state(
         "🔑",
-        "Gemini API key required",
-        "Add your **Google Gemini API Key** in the sidebar under **API Configuration**, then save.",
+        f"{provider} API key required",
+        f"Add your **{provider} API Key** in the sidebar under **API Configuration**, then save.",
     )
 
 
 def _can_generate() -> bool:
-    return bool(get_gemini_api_key())
+    return llm_credentials_ready()
 
 
 def render_generator_tab(show_api_error) -> None:
@@ -537,24 +555,28 @@ def render_generator_tab(show_api_error) -> None:
 
     if not _can_generate():
         _render_credentials_hint()
-        _render_workflow_history()
-        return
+    else:
+        _render_ready_made_templates(show_api_error)
+        _apply_template_selection()
 
-    _render_ready_made_templates(show_api_error)
-    _apply_template_selection()
+        provider = get_llm_provider()
+        help_text = (
+            f"Calls {GEMINI_MODELS.get(get_gemini_model(), get_gemini_model())} with an n8n-optimized prompt."
+            if provider == "Google Gemini"
+            else f"Calls {provider} with an n8n-optimized prompt."
+        )
+        generate_clicked = st.button(
+            "Generate Workflow",
+            type="primary",
+            use_container_width=True,
+            help=help_text,
+        )
 
-    generate_clicked = st.button(
-        "Generate Workflow",
-        type="primary",
-        use_container_width=True,
-        help=f"Calls {GEMINI_MODELS.get(get_gemini_model(), get_gemini_model())} with an n8n-optimized prompt.",
-    )
-
-    if generate_clicked:
-        if not prompt.strip():
-            st.warning("Describe your automation in the text area above before generating.")
-        else:
-            _run_generation(prompt, show_api_error)
+        if generate_clicked:
+            if not prompt.strip():
+                st.warning("Describe your automation in the text area above before generating.")
+            else:
+                _run_generation(prompt, show_api_error)
 
     _render_workflow_output(show_api_error)
     _render_workflow_history()

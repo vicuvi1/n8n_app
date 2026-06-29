@@ -6,8 +6,9 @@ from collections.abc import Callable
 
 import streamlit as st
 
-from services.docker_service import N8nRuntimeStatus, get_n8n_status
+from services.docker_service import N8nRuntimeStatus
 from services.n8n_client import N8nAPIError, N8nClient
+from utils.runtime_cache import get_shared_runtime_status, invalidate_data_caches
 from utils.session import (
     get_n8n_api_key,
     get_n8n_base_url,
@@ -18,12 +19,13 @@ from utils.user_feedback import explain_n8n_api_error, feedback_for_session_mess
 
 
 def _navigate_to(page_id: str, set_active_page: Callable[[str], None] | None) -> None:
+    invalidate_data_caches()
+    st.session_state.pop("n8n_quick_action_feedback", None)
     if set_active_page is not None:
         set_active_page(page_id)
     else:
         st.session_state.active_hub_page = page_id
-    st.session_state.pop("workflows_cache", None)
-    st.rerun()
+        st.rerun()
 
 
 def _create_blank_workflow(instance_url: str) -> None:
@@ -48,7 +50,7 @@ def _create_blank_workflow(instance_url: str) -> None:
             "editor_url": editor_url,
             "workflow_id": workflow_id,
         }
-        st.session_state.pop("workflows_cache", None)
+        invalidate_data_caches()
         st.toast(f'Created "{workflow_name}"', icon="✅")
     except N8nAPIError as exc:
         st.session_state.n8n_quick_action_feedback = {
@@ -69,6 +71,9 @@ def _render_quick_action_feedback() -> None:
         editor_url = feedback.get("editor_url")
         if feedback.get("level") == "success" and editor_url:
             st.link_button("Open new workflow in n8n ↗", editor_url)
+        if st.button("Dismiss", key="n8n_quick_action_dismiss", use_container_width=True):
+            st.session_state.pop("n8n_quick_action_feedback", None)
+            st.rerun()
         return
 
     level = feedback.get("level", "info")
@@ -83,6 +88,10 @@ def _render_quick_action_feedback() -> None:
     else:
         st.info(message)
 
+    if st.button("Dismiss", key="n8n_quick_action_dismiss", use_container_width=True):
+        st.session_state.pop("n8n_quick_action_feedback", None)
+        st.rerun()
+
 
 def render_n8n_quick_actions(
     status: N8nRuntimeStatus | None = None,
@@ -92,7 +101,7 @@ def render_n8n_quick_actions(
 ) -> None:
     """Show open / list / create actions when n8n is running."""
     if status is None:
-        status = get_n8n_status()
+        status = get_shared_runtime_status()
 
     if status.state != "running" or not status.port_open:
         return

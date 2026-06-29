@@ -11,15 +11,10 @@ from utils.ui import empty_state, kpi_cards, render_section_label, render_stat_g
 from utils.user_feedback import explain_n8n_api_error, show_user_feedback
 from views.docker_panel import render_docker_status_banner
 from views.n8n_quick_actions import render_n8n_quick_actions
-from services.docker_service import get_n8n_status
+from utils.runtime_cache import get_shared_runtime_status
 
 
 def _fetch_hub_stats() -> tuple[dict, object | None]:
-    cache = st.session_state.get("hub_stats_cache")
-    now = time.time()
-    if isinstance(cache, dict) and now - cache.get("ts", 0) < 45:
-        return cache["stats"], cache.get("warning")
-
     stats = {
         "workflows": 0,
         "active": 0,
@@ -33,8 +28,19 @@ def _fetch_hub_stats() -> tuple[dict, object | None]:
 
     try:
         client = N8nClient(get_n8n_base_url(), get_n8n_api_key())
-        workflows = client.list_workflows()
-        executions = client.list_executions(limit=50)
+        if isinstance(st.session_state.get("workflows_cache"), list):
+            workflows = st.session_state.workflows_cache
+        else:
+            workflows = client.list_workflows()
+            st.session_state.workflows_cache = workflows
+
+        exec_cache = st.session_state.get("executions_cache")
+        now = time.time()
+        if isinstance(exec_cache, dict) and now - exec_cache.get("ts", 0) < 30:
+            executions = exec_cache.get("data", [])
+        else:
+            executions = client.list_executions(limit=50)
+            st.session_state.executions_cache = {"ts": now, "data": executions}
         stats["workflows"] = len(workflows)
         stats["active"] = sum(1 for w in workflows if w.get("active"))
         stats["executions"] = len(executions)
@@ -46,7 +52,6 @@ def _fetch_hub_stats() -> tuple[dict, object | None]:
         warning = explain_n8n_api_error(exc, "loading hub statistics")
         warning.level = "warning"
 
-    st.session_state.hub_stats_cache = {"ts": time.time(), "stats": stats, "warning": warning}
     return stats, warning
 
 
@@ -58,7 +63,7 @@ def render_hub_home(set_active_page) -> None:
     )
 
     render_section_label("n8n runtime", "Docker container & quick actions")
-    n8n_status = get_n8n_status()
+    n8n_status = get_shared_runtime_status()
     render_docker_status_banner(n8n_status)
     render_n8n_quick_actions(n8n_status, set_active_page=set_active_page)
     if st.button(
@@ -68,7 +73,6 @@ def render_hub_home(set_active_page) -> None:
         type="secondary",
     ):
         set_active_page("docker")
-        st.rerun()
 
     render_section_label("Hub metrics", "Live from your n8n instance")
 
@@ -111,7 +115,6 @@ def render_hub_home(set_active_page) -> None:
                 type="secondary",
             ):
                 set_active_page(page_id)
-                st.rerun()
 
     render_section_label("System snapshot")
     provider = get_llm_provider()

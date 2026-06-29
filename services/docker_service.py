@@ -12,6 +12,7 @@ from config.constants import DOCKER_CONTAINER_NAME, N8N_DEFAULT_PORT, N8N_DEFAUL
 
 N8N_STATUS_CACHE_SEC = 8
 _status_cache: dict = {"ts": 0.0, "data": None}
+_container_name_cache: str | None = None
 
 
 class DockerError(Exception):
@@ -88,15 +89,63 @@ def is_port_open(host: str = "127.0.0.1", port: int = N8N_DEFAULT_PORT) -> bool:
 
 def invalidate_n8n_status_cache() -> None:
     """Clear cached Docker/port status (call after start/stop/restart)."""
+    global _container_name_cache
     _status_cache["ts"] = 0.0
     _status_cache["data"] = None
+    _container_name_cache = None
 
+
+def _discover_n8n_container() -> str | None:
+    """Find an n8n Docker container when the default name `n8n` is not used."""
+    if not shutil.which("docker"):
+        return None
+    try:
+        queries = [
+            ["ps", "-a", "--filter", "ancestor=n8nio/n8n", "--format", "{{.Names}}"],
+            ["ps", "-a", "--filter", "name=n8n", "--format", "{{.Names}}"],
+        ]
+        for args in queries:
+            result = subprocess.run(
+                ["docker", *args],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            names = [n.strip() for n in result.stdout.splitlines() if n.strip()]
+            if names:
+                return names[0]
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    return None
+
+
+def resolve_n8n_container_name(*, force: bool = False) -> str:
+    """Return the Docker container name for the local n8n instance."""
+    global _container_name_cache
+    if (
+        not force
+        and _container_name_cache
+        and container_exists(_container_name_cache)
+    ):
+        return _container_name_cache
+
+    if container_exists(DOCKER_CONTAINER_NAME):
+        _container_name_cache = DOCKER_CONTAINER_NAME
+        return DOCKER_CONTAINER_NAME
+
+    discovered = _discover_n8n_container()
+    if discovered and container_exists(discovered):
+        _container_name_cache = discovered
+        return discovered
+
+    return DOCKER_CONTAINER_NAME
 
 def _build_n8n_status(
-    container_name: str = DOCKER_CONTAINER_NAME,
+    container_name: str | None = None,
     url: str = N8N_DEFAULT_URL,
 ) -> N8nRuntimeStatus:
     """Compute n8n runtime status (uncached)."""
+    container_name = container_name or resolve_n8n_container_name()
     if not shutil.which("docker"):
         return N8nRuntimeStatus(
             state="unknown",
@@ -151,7 +200,7 @@ def _build_n8n_status(
 
 
 def get_n8n_status(
-    container_name: str = DOCKER_CONTAINER_NAME,
+    container_name: str | None = None,
     url: str = N8N_DEFAULT_URL,
     *,
     force_refresh: bool = False,
@@ -166,13 +215,15 @@ def get_n8n_status(
     ):
         return cached
 
-    status = _build_n8n_status(container_name, url)
+    resolved = container_name or resolve_n8n_container_name(force=force_refresh)
+    status = _build_n8n_status(resolved, url)
     _status_cache["ts"] = now
     _status_cache["data"] = status
     return status
 
 
-def start_n8n(container_name: str = DOCKER_CONTAINER_NAME) -> DockerCommandResult:
+def start_n8n(container_name: str | None = None) -> DockerCommandResult:
+    container_name = container_name or resolve_n8n_container_name()
     if not container_exists(container_name):
         raise DockerError(
             f"Container `{container_name}` not found. Create it first:\n"
@@ -187,7 +238,8 @@ def start_n8n(container_name: str = DOCKER_CONTAINER_NAME) -> DockerCommandResul
     )
 
 
-def stop_n8n(container_name: str = DOCKER_CONTAINER_NAME) -> DockerCommandResult:
+def stop_n8n(container_name: str | None = None) -> DockerCommandResult:
+    container_name = container_name or resolve_n8n_container_name()
     if not container_exists(container_name):
         raise DockerError(f"Container `{container_name}` does not exist.")
     proc = _run_docker(["stop", container_name])
@@ -199,7 +251,8 @@ def stop_n8n(container_name: str = DOCKER_CONTAINER_NAME) -> DockerCommandResult
     )
 
 
-def restart_n8n(container_name: str = DOCKER_CONTAINER_NAME) -> DockerCommandResult:
+def restart_n8n(container_name: str | None = None) -> DockerCommandResult:
+    container_name = container_name or resolve_n8n_container_name()
     if not container_exists(container_name):
         raise DockerError(f"Container `{container_name}` does not exist.")
     proc = _run_docker(["restart", container_name])

@@ -41,6 +41,9 @@ EXECUTIONS_LIMIT = 50
 # Auto-refresh interval for execution monitor (seconds).
 AUTO_REFRESH_INTERVAL = 10
 
+# Session cache TTL for execution list (seconds).
+EXECUTIONS_CACHE_SEC = 30
+
 # Set True to show full tracebacks in the UI (development only).
 DEBUG = False
 

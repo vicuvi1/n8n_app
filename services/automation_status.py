@@ -7,12 +7,12 @@ from dataclasses import dataclass
 
 import streamlit as st
 
-from services.docker_service import get_n8n_status
 from services.n8n_client import N8nAPIError, N8nClient
+from utils.runtime_cache import get_shared_runtime_status
 from utils.session import get_n8n_api_key, get_n8n_base_url, n8n_credentials_ready
 from utils.user_feedback import explain_n8n_api_error
 
-AUTOMATION_STATUS_CACHE_SEC = 45
+AUTOMATION_STATUS_CACHE_SEC = 60
 
 
 @dataclass
@@ -47,7 +47,7 @@ def fetch_automation_status(*, force_refresh: bool = False) -> AutomationStatus:
     ):
         return cache["data"]
 
-    runtime = get_n8n_status()
+    runtime = get_shared_runtime_status(force_refresh=force_refresh)
     status = AutomationStatus(
         n8n_state=runtime.state,
         n8n_label=_runtime_label(runtime.state),
@@ -59,10 +59,15 @@ def fetch_automation_status(*, force_refresh: bool = False) -> AutomationStatus:
         status.workflows_note = "Start n8n to load workflow counts."
     elif not n8n_credentials_ready():
         status.workflows_note = "Add n8n API credentials to load counts."
+    elif not force_refresh and isinstance(st.session_state.get("workflows_cache"), list):
+        workflows = st.session_state.workflows_cache
+        status.total_workflows = len(workflows)
+        status.active_workflows = sum(1 for wf in workflows if wf.get("active"))
     else:
         try:
             client = N8nClient(get_n8n_base_url(), get_n8n_api_key())
             workflows = client.list_workflows()
+            st.session_state.workflows_cache = workflows
             status.total_workflows = len(workflows)
             status.active_workflows = sum(1 for wf in workflows if wf.get("active"))
         except N8nAPIError as exc:

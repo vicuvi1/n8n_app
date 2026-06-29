@@ -5,6 +5,7 @@ import streamlit as st
 from config.constants import GEMINI_MODELS, LLM_PROVIDERS
 from config.navigation import DEFAULT_HUB_PAGE, HUB_PAGE_ORDER, HUB_PAGES
 from views.generator_fab import GENERATOR_PAGE_ID, GENERATOR_SHORTCUT_HINT
+from utils.runtime_cache import invalidate_data_caches
 from utils.session import (
     apply_saved_credentials_meta,
     credentials_ready,
@@ -149,6 +150,7 @@ def render_api_configuration() -> str:
                     )
                     meta = read_secrets(path).get("credentials_meta", {})
                     apply_saved_credentials_meta(meta)
+                    invalidate_data_caches()
                     st.success(f"n8n credentials saved to `{path.name}`")
                 except CredentialsStoreError as exc:
                     show_user_error(exc)
@@ -166,6 +168,7 @@ def render_api_configuration() -> str:
                     )
                     meta = read_secrets(path).get("credentials_meta", {})
                     apply_saved_credentials_meta(meta)
+                    invalidate_data_caches()
                     st.success(f"All keys saved to `{path.parent.name}/{path.name}`")
                 except CredentialsStoreError as exc:
                     show_user_error(exc)

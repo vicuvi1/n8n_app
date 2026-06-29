@@ -13,12 +13,12 @@ from config.constants import DOCKER_STATUS_REFRESH_SEC, N8N_DEFAULT_URL
 from services.docker_service import (
     DockerCommandResult,
     DockerError,
-    get_n8n_status,
-    invalidate_n8n_status_cache,
+    N8nRuntimeStatus,
     restart_n8n,
     start_n8n,
     stop_n8n,
 )
+from utils.runtime_cache import get_shared_runtime_status, invalidate_all_status_caches
 from utils.ui import section_header, render_section_label
 from utils.user_feedback import explain_docker_error
 from views.n8n_quick_actions import render_n8n_quick_actions
@@ -54,7 +54,7 @@ def _append_docker_log(
 def _run_docker_action(command_label: str, action: Callable[[], DockerCommandResult]) -> None:
     try:
         result = action()
-        invalidate_n8n_status_cache()
+        invalidate_all_status_caches()
         _append_docker_log("success", result.command, result.message, result.output)
     except DockerError as exc:
         fb = explain_docker_error(exc)
@@ -122,10 +122,10 @@ def _status_dot(state: str) -> str:
     return f'<span class="docker-status-dot" style="background:{color}; {pulse}"></span>'
 
 
-def render_docker_status_banner(status=None) -> None:
+def render_docker_status_banner(status: N8nRuntimeStatus | None = None) -> None:
     """Compact status strip — reusable on Hub Overview and Docker page."""
     if status is None:
-        status = get_n8n_status()
+        status = get_shared_runtime_status()
     color = _status_color(status.state)
     st.markdown(
         f"""
@@ -147,7 +147,7 @@ def render_docker_panel() -> None:
         "Start, stop, or restart your local n8n Docker container.",
     )
 
-    status = get_n8n_status()
+    status = get_shared_runtime_status()
     render_docker_status_banner(status)
     render_n8n_quick_actions(status)
 
@@ -175,8 +175,8 @@ def render_docker_panel() -> None:
     refresh_col, auto_col = st.columns([1, 2])
     with refresh_col:
         if st.button("↻ Refresh status", use_container_width=True):
-            invalidate_n8n_status_cache()
-            status = get_n8n_status(force_refresh=True)
+            invalidate_all_status_caches()
+            status = get_shared_runtime_status(force_refresh=True)
             _append_docker_log("info", "status check", status.message)
             st.rerun()
     with auto_col:
@@ -204,4 +204,5 @@ def render_docker_panel() -> None:
 
     if auto_refresh:
         time.sleep(DOCKER_STATUS_REFRESH_SEC)
+        invalidate_all_status_caches()
         st.rerun()
