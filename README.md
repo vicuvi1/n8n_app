@@ -62,6 +62,12 @@ Build a one-click **`n8n Command Center.exe`** with a custom icon. Each time you
 
 App files are stored at: `%LOCALAPPDATA%\n8n_command_center\`
 
+### Download pre-built .exe (recommended)
+
+Download **`n8n Command Center.exe`** from [GitHub Releases](https://github.com/vicuvi1/n8n_app/releases) — no build step required. Place it on your Desktop and double-click to launch.
+
+> The `.exe` is not stored in git (see `.gitignore`). New builds are published automatically when a version tag like `v1.0.0` is pushed.
+
 ### Prerequisites to build & run the .exe
 
 - **Python 3.10+** ([python.org](https://www.python.org/downloads/)) — check "Add Python to PATH"

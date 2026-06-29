@@ -27,3 +27,6 @@ dist/
 launcher/build/
 launcher/dist/
 *.spec.bak
+
+# Windows launcher builds (distribute via GitHub Releases, not git)
+*.exe
